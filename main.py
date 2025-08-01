@@ -19,6 +19,7 @@ from arch import arch_model
 sys.path.append("src")
 from historicalData import historicalData
 from modelFitting import modelFitting 
+from backtestStrategy import backtest_strategy
 
 # Historical Data Extraction 
 historicalData = historicalData()
@@ -32,3 +33,11 @@ for ticker in historicalData.data.keys():
     series = model.extractSeries()
     model.checkStationarity(series)
     arimaModel, volatilityModel = model.fitModel(series)
+
+    result, metrics = backtest_strategy(ticker)
+    print(
+        f"{ticker} Profit: ${metrics['profit']:.2f} ({metrics['profit_pct']:.2f}%) | "
+        f"Max Drawdown: {metrics['max_drawdown']:.2%} | "
+        f"Sharpe Ratio: {metrics['sharpe_ratio']:.2f}"
+    )
+
