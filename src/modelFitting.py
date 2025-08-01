@@ -92,6 +92,8 @@ class modelFitting:
         Fit a GARCH model to the given time series.
         """
         model = arch_model(series, vol='Garch', p=p, q=q).fit(disp="off")
+        self.p = p
+        self.q = q
         print(model.summary())
         return model
 
@@ -130,7 +132,7 @@ class modelFitting:
 
         if fit_garch:
             volatility_model = self.fitGARCH(series)
-            print(f"Fitted GARCH model for {self.ticker} with order ({volatility_model.p}, {volatility_model.q})")
+            print(f"Fitted GARCH model for {self.ticker} with order ({self.p}, {self.q})")
         else:
             print(f"Using ARIMA model for {self.ticker} with EWMA Volatility")
             volatility_model = self.fitEWMA(series)

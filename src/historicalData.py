@@ -81,6 +81,60 @@ class historicalData:
             direction = np.sign(df["close"].diff()).fillna(0)
             df["OBV"] = (direction * df["volume"]).cumsum()
 
+            # ==============================================================
+            # Normalized technical indicators
+            # ==============================================================
+
+            # Relative distance to moving averages
+            df["norm_dist_sma20"] = df["close"] / df["SMA_20"] - 1
+            df["norm_dist_sma50"] = df["close"] / df["SMA_50"] - 1
+            df["norm_dist_sma100"] = df["close"] / df["SMA_100"] - 1
+            df["norm_dist_ema8"] = df["close"] / df["EMA_8"] - 1
+            df["norm_dist_ema21"] = df["close"] / df["EMA_21"] - 1
+
+            # Scale bounded oscillators to [-1, 1]
+            df["norm_RSI_14"] = (df["RSI_14"] - 50) / 50
+            df["norm_Stoch_%K"] = (df["Stoch_%K"] - 50) / 50
+            df["norm_Stoch_%D"] = (df["Stoch_%D"] - 50) / 50
+
+            # Rolling z-score for MACD and MACD signal
+            roll = 60
+            df["macd_mean"] = df["MACD"].rolling(roll).mean().shift(1)
+            df["macd_std"] = df["MACD"].rolling(roll).std().shift(1)
+            df["norm_MACD"] = (df["MACD"] - df["macd_mean"]) / df["macd_std"]
+
+            df["macd_signal_mean"] = df["MACD_signal"].rolling(roll).mean().shift(1)
+            df["macd_signal_std"] = df["MACD_signal"].rolling(roll).std().shift(1)
+            df["norm_MACD_signal"] = (df["MACD_signal"] - df["macd_signal_mean"]) / df["macd_signal_std"]
+
+            # ATR percentage of price
+            df["norm_ATR_14"] = df["ATR_14"] / df["close"]
+
+            # OBV rolling z-score of daily change
+            df["OBV_diff"] = df["OBV"].diff()
+            df["obv_diff_mean"] = df["OBV_diff"].rolling(roll).mean().shift(1)
+            df["obv_diff_std"] = df["OBV_diff"].rolling(roll).std().shift(1)
+            df["norm_OBV"] = (df["OBV_diff"] - df["obv_diff_mean"]) / df["obv_diff_std"]
+
+            # Volume log transform and rolling z-score
+            df["log_volume"] = np.log1p(df["volume"])
+            df["log_vol_mean"] = df["log_volume"].rolling(roll).mean().shift(1)
+            df["log_vol_std"] = df["log_volume"].rolling(roll).std().shift(1)
+            df["norm_volume"] = (df["log_volume"] - df["log_vol_mean"]) / df["log_vol_std"]
+
+            # Clip extreme values to reduce outlier impact
+            clip_cols = [
+                "norm_RSI_14",
+                "norm_Stoch_%K",
+                "norm_Stoch_%D",
+                "norm_MACD",
+                "norm_MACD_signal",
+                "norm_ATR_14",
+                "norm_OBV",
+                "norm_volume",
+            ]
+            df[clip_cols] = df[clip_cols].clip(-3, 3)
+
             # prepare final columns
             df.reset_index(inplace=True)
             df.rename(columns={"close": "Close", "volume": "Volume"}, inplace=True)
@@ -102,6 +156,20 @@ class historicalData:
                     "Stoch_%D",
                     "ATR_14",
                     "OBV",
+                    # Normalized features
+                    "norm_dist_sma20",
+                    "norm_dist_sma50",
+                    "norm_dist_sma100",
+                    "norm_dist_ema8",
+                    "norm_dist_ema21",
+                    "norm_RSI_14",
+                    "norm_Stoch_%K",
+                    "norm_Stoch_%D",
+                    "norm_MACD",
+                    "norm_MACD_signal",
+                    "norm_ATR_14",
+                    "norm_OBV",
+                    "norm_volume",
                 ]
             ]
 
