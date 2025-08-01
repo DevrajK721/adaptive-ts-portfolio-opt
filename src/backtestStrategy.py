@@ -4,14 +4,15 @@ import matplotlib.pyplot as plt
 from typing import Tuple, Dict
 
 from modelFitting import modelFitting
-from tradingStrategy import ModelDrivenStrategy
-
+from tradingStrategy import ModelDrivenStrategy, LinearRegressionStrategy
 
 def backtest_strategy(
     ticker: str,
     rf_rate: float = 0.02,
     initial_cash: float = 100000.0,
     refit_interval: int = 300,
+    strategy_cls=ModelDrivenStrategy,
+    **strategy_kwargs,
 ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """Run a simple walk-forward backtest for ``ticker``.
 
@@ -34,7 +35,7 @@ def backtest_strategy(
         Dictionary with ``max_drawdown``, ``sharpe_ratio``, ``profit`` and
         ``profit_pct`` keys.
     """
-    strat = ModelDrivenStrategy(ticker, refit_interval=refit_interval)
+    strat = strategy_cls(ticker, refit_interval=refit_interval, **strategy_kwargs)
     df = strat.load_data()
     df["Date"] = pd.to_datetime(df["Date"])
 

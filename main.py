@@ -20,6 +20,7 @@ sys.path.append("src")
 from historicalData import historicalData
 from modelFitting import modelFitting 
 from backtestStrategy import backtest_strategy
+from tradingStrategy import LinearRegressionStrategy
 
 # Historical Data Extraction 
 historicalData = historicalData()
@@ -34,7 +35,10 @@ for ticker in historicalData.data.keys():
     model.checkStationarity(series)
     arimaModel, volatilityModel = model.fitModel(series)
 
-    result, metrics = backtest_strategy(ticker)
+    result, metrics = backtest_strategy(
+        ticker,
+        strategy_cls=LinearRegressionStrategy,
+    )
     print(
         f"{ticker} Profit: ${metrics['profit']:.2f} ({metrics['profit_pct']:.2f}%) | "
         f"Max Drawdown: {metrics['max_drawdown']:.2%} | "

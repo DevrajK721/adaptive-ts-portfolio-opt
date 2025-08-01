@@ -2,6 +2,8 @@ import os
 from typing import Optional
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
 
 from modelFitting import modelFitting
 
@@ -90,6 +92,111 @@ class ModelDrivenStrategy:
             mask = 1
 
         weight = raw_weight * mask
+        weight *= self.target_vol / sigma_hat
+        weight = np.clip(weight, -self.leverage_cap, self.leverage_cap)
+        weight = self.smoothing * weight + (1 - self.smoothing) * self.prev_weight
+        self.prev_weight = weight
+        return weight
+
+class LinearRegressionStrategy(ModelDrivenStrategy):
+    """Trading strategy using a linear regression combiner for signals."""
+
+    def __init__(
+        self,
+        ticker: str,
+        alpha: float = 1.0,
+        train_window: int = 252,
+        **kwargs,
+    ):
+        super().__init__(ticker, **kwargs)
+        self.alpha = alpha
+        self.train_window = train_window
+        self.model = None
+        self.scaler = None
+        self.feature_cols = None
+
+    def _vol_series(self) -> pd.Series:
+        """Return volatility series used for training."""
+        if hasattr(self.vol_model, "conditional_volatility"):
+            vol = self.vol_model.conditional_volatility
+        else:
+            vol = self.vol_model
+        return pd.Series(vol, index=self.series.index[-len(vol):])
+
+    def _prepare_training_data(self) -> pd.DataFrame:
+        df = self.df.copy()
+        df["arima_pred"] = self.arima_model.predict(start=0, end=len(df) - 1)
+        vol_series = self._vol_series()
+        df["vol_forecast"] = vol_series.iloc[-len(df) :].values
+        df["signal_strength"] = df["arima_pred"] / df["vol_forecast"]
+
+        self.feature_cols = [
+            "arima_pred",
+            "vol_forecast",
+            "signal_strength",
+            "norm_dist_sma20",
+            "norm_dist_sma50",
+            "norm_RSI_14",
+            "norm_MACD",
+            "norm_MACD_signal",
+            "norm_ATR_14",
+            "norm_OBV",
+            "norm_volume",
+        ]
+
+        df["target"] = df["LogReturn"].shift(-1)
+        df.dropna(subset=self.feature_cols + ["target"], inplace=True)
+        return df
+
+    def fit_models(self):
+        super().fit_models()
+        df = self._prepare_training_data()
+        df_train = df.tail(self.train_window)
+        X = df_train[self.feature_cols]
+        y = df_train["target"]
+        self.scaler = StandardScaler()
+        X_scaled = self.scaler.fit_transform(X)
+        self.model = Ridge(alpha=self.alpha)
+        self.model.fit(X_scaled, y)
+        self.df_features = df
+        self.steps_since_fit = 0
+
+    def compute_weight(self, tech_filter: bool = True) -> float:
+        if self.df is None:
+            self.load_data()
+        if (
+            self.arima_model is None
+            or self.vol_model is None
+            or self.model is None
+            or self.steps_since_fit >= self.refit_interval
+        ):
+            self.fit_models()
+        else:
+            self.steps_since_fit += 1
+
+        last = self.df.iloc[-1]
+        r_hat = self._next_return_forecast()
+        sigma_hat = self._next_vol_forecast()
+
+        feats = [
+            r_hat,
+            sigma_hat,
+            r_hat / sigma_hat,
+            last.get("norm_dist_sma20", 0),
+            last.get("norm_dist_sma50", 0),
+            last.get("norm_RSI_14", 0),
+            last.get("norm_MACD", 0),
+            last.get("norm_MACD_signal", 0),
+            last.get("norm_ATR_14", 0),
+            last.get("norm_OBV", 0),
+            last.get("norm_volume", 0),
+        ]
+
+        X_last = self.scaler.transform([feats])
+        y_pred = float(self.model.predict(X_last)[0])
+
+        raw_weight = y_pred / (sigma_hat ** 2 + 1e-8)
+        weight = np.tanh(raw_weight)
         weight *= self.target_vol / sigma_hat
         weight = np.clip(weight, -self.leverage_cap, self.leverage_cap)
         weight = self.smoothing * weight + (1 - self.smoothing) * self.prev_weight
