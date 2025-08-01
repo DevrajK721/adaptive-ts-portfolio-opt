@@ -9,12 +9,21 @@ class ModelDrivenStrategy:
     """Baseline trading strategy using ARIMA return forecasts and
     volatility estimates."""
 
-    def __init__(self, ticker: str, target_vol: float = 0.1,
-                 leverage_cap: float = 1.0, smoothing: float = 0.2):
+    def __init__(
+        self,
+        ticker: str,
+        target_vol: float = 0.1,
+        leverage_cap: float = 1.0,
+        smoothing: float = 0.2,
+        refit_interval: int = 20,
+    ):
+        
         self.ticker = ticker
         self.target_vol = target_vol
         self.leverage_cap = leverage_cap
         self.smoothing = smoothing
+        self.refit_interval = refit_interval
+        self.steps_since_fit = refit_interval
         self.prev_weight = 0.0
         self.df: Optional[pd.DataFrame] = None
         self.arima_model = None
@@ -34,6 +43,7 @@ class ModelDrivenStrategy:
         series = mf.extractSeries()
         self.arima_model, self.vol_model = mf.fitModel(series)
         self.series = series
+        self.steps_since_fit = 0
         return self.arima_model, self.vol_model
 
     def _next_return_forecast(self) -> float:
@@ -54,8 +64,14 @@ class ModelDrivenStrategy:
         """Compute the position weight for the next period."""
         if self.df is None:
             self.load_data()
-        if self.arima_model is None or self.vol_model is None:
+        if (
+            self.arima_model is None
+            or self.vol_model is None
+            or self.steps_since_fit >= self.refit_interval
+        ):
             self.fit_models()
+        else:
+            self.steps_since_fit += 1
 
         r_hat = self._next_return_forecast()
         sigma_hat = self._next_vol_forecast()

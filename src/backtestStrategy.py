@@ -11,6 +11,7 @@ def backtest_strategy(
     ticker: str,
     rf_rate: float = 0.02,
     initial_cash: float = 100000.0,
+    refit_interval: int = 300,
 ) -> Tuple[pd.DataFrame, Dict[str, float]]:
     """Run a simple walk-forward backtest for ``ticker``.
 
@@ -22,6 +23,8 @@ def backtest_strategy(
         Annual risk free rate used for the Sharpe ratio, by default 0.02.
     initial_cash : float, optional
         Starting cash for the strategy, by default 100000.0.
+    refit_interval : int, optional
+        Number of periods between model refits, by default 20.
 
     Returns
     -------
@@ -31,7 +34,7 @@ def backtest_strategy(
         Dictionary with ``max_drawdown``, ``sharpe_ratio``, ``profit`` and
         ``profit_pct`` keys.
     """
-    strat = ModelDrivenStrategy(ticker)
+    strat = ModelDrivenStrategy(ticker, refit_interval=refit_interval)
     df = strat.load_data()
     df["Date"] = pd.to_datetime(df["Date"])
 
@@ -43,14 +46,7 @@ def backtest_strategy(
     start_idx = 100
 
     for i in range(start_idx, len(df)):
-        # fit models on data available up to the previous day
-        series = df.loc[: i - 1, "LogReturn"]
-        mf = modelFitting(ticker)
-        arima_model, vol_model = mf.fitModel(series)
-
         strat.df = df.iloc[:i].copy()
-        strat.arima_model = arima_model
-        strat.vol_model = vol_model
         weight = strat.compute_weight()
 
         if i < len(df) - 1:
